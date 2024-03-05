@@ -1,2 +1,4 @@
+.github/
 mongodb
-  
+venv/
+.gitignore

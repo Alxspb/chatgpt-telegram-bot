@@ -16,8 +16,8 @@ RUN pip3 install -U pip && pip3 install -U wheel && pip3 install -U setuptools==
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt && rm -r /tmp/requirements.txt
 
-COPY . /code
-WORKDIR /code
+COPY . /app
+WORKDIR /app
 
-CMD ["bash"]
+CMD ["python3", "/app/bot/bot.py"]
 
