@@ -33,6 +33,8 @@ import openai_utils
 
 from faster_whisper import WhisperModel
 
+from gradio_client import Client
+
 # setup
 db = database.Database()
 logger = logging.getLogger(__name__)
@@ -64,7 +66,9 @@ To get a reply from the bot in the chat – @ <b>tag</b> it or <b>reply</b> to i
 For example: "{bot_username} write a poem about Telegram"
 """
 
-stt_model = WhisperModel("base", device="auto", compute_type="int8", cpu_threads=1, download_root='data')
+stt_model = WhisperModel("base", device="auto", compute_type="int8", cpu_threads=1, download_root="data")
+
+txt2img_client = Client("ByteDance/SDXL-Lightning", output_dir="data")
 
 def split_text_into_chunks(text, chunk_size):
     for i in range(0, len(text), chunk_size):
@@ -393,25 +397,34 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     await update.message.chat.send_action(action="upload_photo")
 
     message = message or update.message.text
+    await update.message.chat.send_action(action="upload_photo")
 
-    try:
-        image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images,
-                                                        size=config.image_size)
-    except openai.error.InvalidRequestError as e:
-        if str(e).startswith("Your request was rejected as a result of our safety system"):
-            text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-            return
-        else:
-            raise
-
-    # token usage
-    db.set_user_attribute(user_id, "n_generated_images",
-                          config.return_n_generated_images + db.get_user_attribute(user_id, "n_generated_images"))
-
-    for i, image_url in enumerate(image_urls):
-        await update.message.chat.send_action(action="upload_photo")
-        await update.message.reply_photo(image_url, parse_mode=ParseMode.HTML)
+    if config.use_sdxl_lightning:
+        result = txt2img_client.predict(
+            message,
+            "2-Step",  # Literal['1-Step', '2-Step', '4-Step', '8-Step']  in 'Select inference steps' Dropdown component
+            api_name="/generate_image"
+        )
+        db.set_user_attribute(user_id, "n_generated_images",
+                              db.get_user_attribute(user_id, "n_generated_images") + 1)
+        await update.message.reply_photo(result, parse_mode=ParseMode.HTML)
+    else:
+        try:
+            image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images,
+                                                            size=config.image_size)
+            # token usage
+            db.set_user_attribute(user_id, "n_generated_images",
+                                  config.return_n_generated_images + db.get_user_attribute(user_id,
+                                                                                           "n_generated_images"))
+            for i, image_url in enumerate(image_urls):
+                await update.message.reply_photo(image_url, parse_mode=ParseMode.HTML)
+        except openai.error.InvalidRequestError as e:
+            if str(e).startswith("Your request was rejected as a result of our safety system"):
+                text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
+                await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+                return
+            else:
+                raise
 
 
 async def new_dialog_handle(update: Update, context: CallbackContext):
