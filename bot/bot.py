@@ -68,7 +68,7 @@ For example: "{bot_username} write a poem about Telegram"
 
 stt_model = WhisperModel("base", device="auto", compute_type="int8", cpu_threads=1, download_root="data")
 
-txt2img_client = Client("ByteDance/SDXL-Lightning", output_dir="data")
+txt2img_client = None
 
 def split_text_into_chunks(text, chunk_size):
     for i in range(0, len(text), chunk_size):
@@ -400,6 +400,8 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     await update.message.chat.send_action(action="upload_photo")
 
     if config.use_sdxl_lightning:
+        if txt2img_client is None:
+            txt2img_client = Client("ByteDance/SDXL-Lightning", output_dir="data")
         result = txt2img_client.predict(
             message,
             "2-Step",  # Literal['1-Step', '2-Step', '4-Step', '8-Step']  in 'Select inference steps' Dropdown component
